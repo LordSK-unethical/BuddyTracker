@@ -1,98 +1,209 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { useState } from 'react';
+import { View, Text, StyleSheet, Alert } from 'react-native';
+import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { PrimaryButton } from '@/components/ui/PrimaryButton';
+import { Avatar } from '@/components/ui/Avatar';
+import { JoinGroupModal } from '@/components/JoinGroupModal';
+import { useAuth } from '@/src/context/AuthContext';
+import { useGroup } from '@/hooks/useGroup';
+import { useTracking } from '@/hooks/useTracking';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const { userData } = useAuth();
+  const { group, isInGroup, isLeader, loading, createGroup, joinGroup, leaveGroup, deleteGroup } =
+    useGroup();
+  const { tracking, startTracking, stopTracking, error: trackingError } = useTracking();
+  const [showJoinModal, setShowJoinModal] = useState(false);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const handleDeleteGroup = () => {
+    Alert.alert(
+      'Delete Group',
+      'This will permanently delete the group for all members. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteGroup();
+            } catch (err: any) {
+              Alert.alert('Error', err.message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleLeaveGroup = () => {
+    Alert.alert('Leave Group', 'Are you sure you want to leave this group?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Leave',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await leaveGroup();
+          } catch (err: any) {
+            Alert.alert('Error', err.message);
+          }
+        },
+      },
+    ]);
+  };
+
+  if (isInGroup && group) {
+    return (
+      <ScreenContainer>
+        <View style={styles.codeCard}>
+          <Text style={styles.codeLabel}>Group Code</Text>
+          <Text style={styles.code}>{group.code}</Text>
+          <Text style={styles.roleBadge}>
+            {isLeader ? 'You are the leader' : 'You are a member'}
+          </Text>
+        </View>
+
+        <View style={styles.groupInfo}>
+          <Text style={styles.memberCount}>
+            {group.members.length} member{group.members.length !== 1 ? 's' : ''}
+          </Text>
+          {tracking && <Text style={styles.trackingBadge}>Sharing location</Text>}
+          {trackingError && <Text style={styles.errorText}>{trackingError}</Text>}
+        </View>
+
+        <View style={styles.actions}>
+          {tracking ? (
+            <PrimaryButton title="Stop Tracking" variant="secondary" onPress={stopTracking} />
+          ) : (
+            <PrimaryButton title="Start Tracking" onPress={startTracking} />
+          )}
+
+          <View style={styles.spacer} />
+
+          {isLeader ? (
+            <PrimaryButton
+              title="Delete Group"
+              variant="danger"
+              onPress={handleDeleteGroup}
+              loading={loading}
+            />
+          ) : (
+            <PrimaryButton
+              title="Leave Group"
+              variant="secondary"
+              onPress={handleLeaveGroup}
+              loading={loading}
+            />
+          )}
+        </View>
+
+        <JoinGroupModal
+          visible={showJoinModal}
+          onClose={() => setShowJoinModal(false)}
+          onSubmit={joinGroup}
+          loading={loading}
+        />
+      </ScreenContainer>
+    );
+  }
+
+  return (
+    <ScreenContainer>
+      <View style={styles.welcomeSection}>
+        <Avatar uri={userData?.avatarUrl} base64={userData?.avatarBase64} size={64} />
+        <Text style={styles.welcome}>Welcome, {userData?.username}</Text>
+      </View>
+
+      <View style={styles.actions}>
+        <PrimaryButton title="Create Group" onPress={createGroup} loading={loading} />
+        <View style={styles.spacer} />
+        <PrimaryButton
+          title="Join Group"
+          variant="secondary"
+          onPress={() => setShowJoinModal(true)}
+        />
+      </View>
+
+      <JoinGroupModal
+        visible={showJoinModal}
+        onClose={() => setShowJoinModal(false)}
+        onSubmit={joinGroup}
+        loading={loading}
+      />
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  welcomeSection: {
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+    marginTop: 32,
   },
-  stepContainer: {
-    gap: 8,
+  welcome: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  actions: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 12,
+  },
+  spacer: {
+    height: 4,
+  },
+  codeCard: {
+    alignItems: 'center',
+    marginTop: 40,
+    backgroundColor: '#111',
+    borderRadius: 20,
+    padding: 32,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+  codeLabel: {
+    fontSize: 14,
+    color: '#666',
     marginBottom: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  code: {
+    fontSize: 40,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 6,
+  },
+  roleBadge: {
+    marginTop: 12,
+    fontSize: 13,
+    color: '#888',
+    backgroundColor: '#1a1a1a',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  groupInfo: {
+    alignItems: 'center',
+    marginTop: 16,
+    gap: 4,
+  },
+  memberCount: {
+    fontSize: 15,
+    color: '#555',
+  },
+  trackingBadge: {
+    fontSize: 13,
+    color: '#34c759',
+    backgroundColor: '#1a2e1a',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#ff4444',
   },
 });
